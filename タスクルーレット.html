@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>二段階ルーレット</title>
+    <style>
+        body {
+            font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            font-size: 24px;
+        }
+        .roulette-wrapper {
+            position: relative;
+            width: 340px;
+            height: 340px;
+            margin: 30px auto;
+        }
+        canvas {
+            background-color: #fff;
+            border-radius: 50%;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .pointer {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-top: 40px solid #e74c3c;
+            z-index: 10;
+        }
+        .btn-container {
+            margin-top: 20px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        #resetBtn {
+            background-color: #2ecc71;
+            display: none;
+        }
+        #resetBtn:hover {
+            background-color: #27ae60;
+        }
+        .result-text {
+            margin-top: 25px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #d35400;
+            min-height: 30px;
+        }
+        .history {
+            margin-top: 10px;
+            font-size: 16px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+
+    <h1 id="title">1段階目：ジャンルを選択</h1>
+    
+    <div class="roulette-wrapper">
+        <div class="pointer"></div>
+        <canvas id="rouletteCanvas" width="340" height="340"></canvas>
+    </div>
+
+    <div class="btn-container">
+        <button id="spinBtn">ルーレットを回す</button>
+        <button id="resetBtn">最初からやり直す</button>
+    </div>
+
+    <div class="history" id="historyText"></div>
+    <div class="result-text" id="resultText">まずはルーレットを回してください！</div>
+
+    <script>
+        // ルーレットのデータ
+        const stage1 = ["筋トレ", "FX", "英語"];
+        const stage2A = ["腕立て伏せ", "上体起こし", "スクワット", "バックラウンジ", "腹筋ローラー", "ダンベル", "プランク"];
+        const stage2B = ["ポモドーロ １", "ポモドーロ ２", "ポモドーロ ３", "ポモドーロ 任意"];
+        
+        // カラースキーム
+        const colors = ["#FF5733", "#33A1FF", "#28B463", "#F1C40F", "#9B59B6", "#E67E22", "#1ABC9C", "#E74C3C"];
+
+        // 変数管理
+        let currentStage = 1;
+        let currentItems = stage1;
+        let result1 = ""; // 1段階目の結果
+        
+        // Canvas設定
+        const canvas = document.getElementById("rouletteCanvas");
+        const ctx = canvas.getContext("2d");
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = 160;
+
+        let currentAngle = 0;
+        let isSpinning = false;
+        let animationId;
+
+        // UI要素
+        const titleEl = document.getElementById("title");
+        const spinBtn = document.getElementById("spinBtn");
+        const resetBtn = document.getElementById("resetBtn");
+        const resultText = document.getElementById("resultText");
+        const historyText = document.getElementById("historyText");
+
+        // ルーレットの描画関数
+        function drawRoulette() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const sliceAngle = (2 * Math.PI) / currentItems.length;
+            const offset = -Math.PI / 2; // 0度を真上にするためのオフセット
+
+            for (let i = 0; i < currentItems.length; i++) {
+                const startAngle = currentAngle + i * sliceAngle + offset;
+                const endAngle = currentAngle + (i + 1) * sliceAngle + offset;
+
+                // 扇形の描画
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+                ctx.fillStyle = colors[i % colors.length];
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = "#fff";
+                ctx.stroke();
+
+                // テキストの描画
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(currentAngle + i * sliceAngle + sliceAngle / 2 + offset);
+                ctx.textAlign = "right";
+                ctx.textBaseline = "middle";
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold 16px sans-serif";
+                
+                // 文字が長い場合は少し内側に寄せる
+                const text = currentItems[i];
+                ctx.fillText(text, radius - 20, 0);
+                ctx.restore();
+            }
+        }
+
+        // 初回描画
+        drawRoulette();
+
+        // スピン処理
+        spinBtn.addEventListener("click", () => {
+            if (isSpinning) return;
+            isSpinning = true;
+            spinBtn.disabled = true;
+            resultText.textContent = "回転中...";
+
+            // 回転速度と摩擦
+            let spinVelocity = Math.random() * 0.2 + 0.5; // 初速（ランダム性を持たせる）
+            const friction = 0.985; // 摩擦係数（1に近いほど長く回る）
+
+            function animate() {
+                currentAngle += spinVelocity;
+                spinVelocity *= friction;
+
+                drawRoulette();
+
+                // 速度が十分落ちたら停止
+                if (spinVelocity < 0.002) {
+                    cancelAnimationFrame(animationId);
+                    isSpinning = false;
+                    determineWinner();
+                    return;
+                }
+                animationId = requestAnimationFrame(animate);
+            }
+            animate();
+        });
+
+        // リセット処理
+        resetBtn.addEventListener("click", () => {
+            currentStage = 1;
+            currentItems = stage1;
+            result1 = "";
+            currentAngle = 0;
+            
+            titleEl.textContent = "1段階目：ジャンルを選択";
+            historyText.textContent = "";
+            resultText.textContent = "まずはルーレットを回してください！";
+            
+            spinBtn.style.display = "inline-block";
+            spinBtn.disabled = false;
+            resetBtn.style.display = "none";
+            
+            drawRoulette();
+        });
+
+        // 結果判定と段階移行処理
+        function determineWinner() {
+            // 現在の角度から、真上（ポインター位置）にある項目を計算
+            const sliceAngle = (2 * Math.PI) / currentItems.length;
+            const normalizedAngle = (2 * Math.PI - (currentAngle % (2 * Math.PI))) % (2 * Math.PI);
+            const winnerIndex = Math.floor(normalizedAngle / sliceAngle);
+            const winner = currentItems[winnerIndex];
+
+            if (currentStage === 1) {
+                // 1段階目の結果処理
+                result1 = winner;
+                historyText.textContent = `1段階目の結果: ${result1}`;
+                resultText.textContent = `「${result1}」が選ばれました！続いて2段階目を回してください。`;
+                
+                // 次のステージのアイテムをセット
+                if (result1 === "筋トレ") {
+                    currentItems = stage2A;
+                } else {
+                    // FX または 英語 の場合
+                    currentItems = stage2B;
+                }
+                
+                currentStage = 2;
+                currentAngle = 0; // ルーレットの角度をリセット
+                titleEl.textContent = "2段階目：詳細を選択";
+                
+                // 再描画とボタン復活
+                setTimeout(() => {
+                    drawRoulette();
+                    spinBtn.disabled = false;
+                    spinBtn.textContent = "2段階目を回す";
+                }, 1000); // 1秒後に2段階目のルーレットに切り替え
+
+            } else if (currentStage === 2) {
+                // 2段階目の結果処理
+                resultText.textContent = `【最終決定】 ${result1} ＞ 「${winner}」 に決定しました！`;
+                
+                // ボタンの表示切り替え
+                spinBtn.style.display = "none";
+                resetBtn.style.display = "inline-block";
+                spinBtn.textContent = "ルーレットを回す"; // リセット時用にテキストを戻しておく
+            }
+        }
+    </script>
+</body>
+</html>
